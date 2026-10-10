@@ -6,7 +6,7 @@
 
 Сделать простое веб-приложение, которое отвечает на вопросы об уходе за комнатными растениями (полив, освещение, пересадка, удобрения, болезни и вредители) по собранной базе справочных статей.
 
-Приложение находит подходящие фрагменты статей с помощью поиска **BM25**, передаёт их в **LLM** и показывает пользователю ответ вместе с источниками. Качество ответов проверяется на собственном benchmark-наборе вопросов.
+Целевое приложение находит подходящие фрагменты статей с помощью поиска **BM25**, передаёт их в **LLM** и показывает пользователю ответ вместе с источниками. Качество ответов будет проверяться на собственном benchmark-наборе вопросов.
 
 ## Пользователь и основной сценарий
 
@@ -26,4 +26,67 @@
 
 ## Запуск
 
-_Будет добавлено после реализации._
+Команды выполняются из корня репозитория. Сейчас реализован Django API с тестовым ответом; интерфейс, поиск и LLM ещё не подключены. База данных и ключи LLM не нужны.
+
+### Через uv
+
+Нужен установленный [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+```bash
+uv run python manage.py runserver
+```
+
+uv подготовит Python 3.13, .venv и зависимости из uv.lock. При первой загрузке отсутствующих компонентов нужен доступ к сети. Остановить сервер: Ctrl+C.
+
+### Через Docker Compose
+
+Нужен работающий Docker с Compose. При использовании Windows/WSL включите интеграцию дистрибуции в Docker Desktop.
+
+```bash
+docker compose up --build
+```
+
+Контейнер использует тот же uv.lock. Остановить: Ctrl+C, удалить контейнер проекта: `docker compose down`.
+
+Оба способа запускают API на **http://localhost:8000/ask**. Запускайте один вариант за раз, чтобы не занимать порт 8000 дважды. Используются настройки локальной разработки и Django runserver. Главная страница пока не реализована.
+
+## Проверка API
+
+Эндпоинт — `POST /ask`, без завершающего слеша. Для CSRF-защиты сначала получите cookie через `GET /ask`: он возвращает 405 и устанавливает токен. Затем отправьте POST с cookie и заголовком X-CSRFToken. Пример для Bash:
+
+```bash
+COOKIE_FILE=$(mktemp)
+curl -sS -c "$COOKIE_FILE" http://localhost:8000/ask -o /dev/null
+CSRF_TOKEN=$(awk '$6 == "csrftoken" {print $7}' "$COOKIE_FILE")
+curl -fsS -b "$COOKIE_FILE" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRFToken: $CSRF_TOKEN" \
+  --data '{"question":"Как поливать монстеру?"}' \
+  http://localhost:8000/ask
+rm "$COOKIE_FILE"
+```
+
+Ответ HTTP 200:
+
+```json
+{
+  "answer": "Тестовый ответ. Поиск BM25 и LLM пока не подключены.",
+  "sources": []
+}
+```
+
+Путь запроса и контракт API описаны в [архитектуре](spec/tech/architecture.md). Правила работы — в [AGENTS.md](AGENTS.md), изменения и результаты проверок — в [CHANGE_HISTORY.md](CHANGE_HISTORY.md).
+
+### Тесты
+
+```bash
+uv run python manage.py check
+uv run python manage.py test tests
+```
+
+Для запущенного контейнера:
+
+```bash
+docker compose exec web uv run --no-sync python manage.py check
+docker compose exec web uv run --no-sync python manage.py test tests
+```
