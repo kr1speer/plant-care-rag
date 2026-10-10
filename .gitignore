@@ -1,0 +1,16 @@
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Django
+db.sqlite3
+staticfiles/
+
+# Секреты (ключ LLM и т.п.)
+.env
