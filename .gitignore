@@ -449,3 +449,6 @@ __pycache__/
 .coverage
 htmlcov/
 staticfiles/
+
+# Ignore the entire VS Code directory (rule from main).
+.vscode/
