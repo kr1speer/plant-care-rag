@@ -7,4 +7,6 @@
 5. Проверь Git diff. Сохраняй чужие изменения, не добавляй окружения, кеши, секреты и файлы IDE в репозиторий.
 6. Интерфейс проверь в браузере по spec/product/scenarios.md. Benchmark запускай при изменении реализованного RAG; на КТ №1 RAG ещё не подключён. Результаты и ограничения фиксируй в spec/product/kt1.md и CHANGE_HISTORY.md. Исторические проверки не заменяют проверку новой версии.
 
+7. Проверки качества перед коммитом: Ruff lint/format, djLint lint/check, npm run lint и npm run format:check. Python docstrings — Google style; покрытие всего app/ со строками и ветвями не ниже 75%. Playwright: npm run test:browser против запущенного uv/Compose. Команды и область инструментов — в spec/tech/quality.md и README. Не коммить .env, node_modules, покрытие и отчёты Playwright.
+
 Бэкенд и интерфейс разрабатываются в одном Django-проекте. Роли команды описаны в README.md.

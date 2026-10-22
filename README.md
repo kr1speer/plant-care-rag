@@ -15,15 +15,16 @@
 - [Все требования КТ №1, замечания преподавателя, результаты и пакет сдачи](spec/product/kt1.md).
 - [Задачи, зависимости и ответственные](spec/tech/tasks.md).
 - Исходники интерфейса: [HTML](app/assistant/templates/assistant/index.html), [JavaScript](app/assistant/static/assistant/app.js), [CSS](app/assistant/static/assistant/style.css).
+- [Качество кода, настройки и CI](spec/tech/quality.md).
 - [История изменений и проверок](CHANGE_HISTORY.md), [правила работы](AGENTS.md).
 
 ## Команда и роли
 
-| Участник | Роль | Зона ответственности |
-|---|---|---|
-| Акопов Антон | BM25 и RAG | Корпус, фрагменты, индекс, поиск, benchmark и метрики; проверка источников демонстрации |
-| Кунев Валентин | Интеграция | Django, связь интерфейса и API, будущий вызов LLM, тесты API и запуск |
-| Гаранин Ерофей | Продукт и интерфейс | Пользователь, задача, сценарии, внешний вид и браузерная проверка |
+| Участник       | Роль                | Зона ответственности                                                                    |
+| -------------- | ------------------- | --------------------------------------------------------------------------------------- |
+| Акопов Антон   | BM25 и RAG          | Корпус, фрагменты, индекс, поиск, benchmark и метрики; проверка источников демонстрации |
+| Кунев Валентин | Интеграция          | Django, связь интерфейса и API, будущий вызов LLM, тесты API и запуск                   |
+| Гаранин Ерофей | Продукт и интерфейс | Пользователь, задача, сценарии, внешний вид и браузерная проверка                       |
 
 Зоны постоянные. Каждый участник должен понимать путь запроса и уметь запускать проект; личное подтверждение фиксируется в приёмке, а не предполагается из наличия инструкции.
 
@@ -45,7 +46,7 @@ benchmark/questions.jsonl  вопросы и эталонные ответы б�
 tests/                     API-тесты и браузерный сценарий
 manage.py                  команды Django
 pyproject.toml, uv.lock     зависимости Python 3.13 / Django 5.2
-Dockerfile, compose.yaml   контейнерный запуск
+Dockerfile, docker-compose.yaml  контейнерный запуск
 ```
 
 ## Запуск из свежего клона
@@ -58,6 +59,21 @@ cd plant-care-rag
 Исправления доступны в клоне только после их публикации в выбранной ветке. Сверяйте SHA и статус публикации в [приёмке](spec/product/kt1.md). Сейчас результаты приёмки описывают локальную рабочую версию.
 
 Все следующие команды выполняются из корня проекта. Запускайте uv и Compose по очереди: оба используют порт 8000.
+
+### Локальная конфигурация
+
+Перед первым запуском скопируйте шаблон:
+
+```bash
+cp .env.example .env
+uv run python -c "import secrets; print(secrets.token_urlsafe(64))"
+```
+
+Вставьте сгенерированное значение в `DJANGO_SECRET_KEY` файла `.env`. Не публикуйте его. Пустой или отсутствующий ключ останавливает запуск с понятной ошибкой; общего ключа в исходниках нет. `.env` исключён из Git и контекста Docker; `.env.example` содержит только пустой ключ и несекретные примеры.
+
+Настройки читаются из среды процесса и корневого `.env`; среда процесса имеет приоритет. `DJANGO_DEBUG` принимает только `true`/`false` (регистр не важен), по умолчанию `false`. Для локального интерфейса и static оставьте `true`, как в шаблоне. `DJANGO_ALLOWED_HOSTS` — список через запятую, по умолчанию `localhost,127.0.0.1,[::1]`. Тесты настроек изолированы от вашего файла. Контейнер получает значения через `environment` в `docker-compose.yaml`, а не из файла внутри образа.
+
+При уже заданных переменных среды `.env` не обязателен. Сборка образа не требует ключа, запуск Compose требует.
 
 ### Через uv
 
@@ -116,33 +132,59 @@ rm "$COOKIE_FILE"
 
 Ожидаются HTTP 200, строка `answer` о недостатке света и непустой `sources` с `title`, `fragment`, `url`. Неподдерживаемый вопрос тоже возвращает 200, но с сообщением об ограничении демонстрации и `sources: []`. Полный контракт и ошибки — в [архитектуре](spec/tech/architecture.md).
 
-## Проверки
+## Инструменты разработки и проверки
+
+Python 3.13; Node.js 24 (для линтеров и браузерных тестов, не нужен для запуска Django). Версии закреплены в `uv.lock` и `package-lock.json`.
 
 ```bash
+uv sync --locked
+npm ci
 uv run python manage.py check
 uv run python manage.py test tests
-node --check app/assistant/static/assistant/app.js
-git diff --check
+uv run coverage run manage.py test tests
+uv run coverage report
+uv run coverage xml
+uv run coverage html
+uv run ruff check .
+uv run ruff format --check .
+uv run djlint app/assistant/templates --lint
+uv run djlint app/assistant/templates --check
+npm run lint
+npm run format:check
 ```
 
-В запущенном контейнере:
+Покрытие всего Python-кода `app/` измеряется со строками и ветвями. Порог — **не ниже 75%**, верхнего ограничения нет. Тесты и браузерные сценарии не входят в знаменатель Python. Отчёты `coverage.xml` и `htmlcov/` не коммитятся. Google docstrings проверяются Ruff, шаблоны Django — djLint, JS — ESLint; форматирование остальных поддерживаемых файлов — Prettier. Корпус, benchmark и LICENSE не переформатируются.
+
+Исправляющие команды для разработки (в CI используются только проверки):
+
+```bash
+uv run ruff check --fix .
+uv run ruff format .
+uv run djlint app/assistant/templates --reformat
+npm run format
+```
+
+В запущенном контейнере, который содержит только runtime-зависимости:
 
 ```bash
 docker compose exec -T web uv run --no-sync python manage.py check
 docker compose exec -T web uv run --no-sync python manage.py test tests
 ```
 
-Дополнительная автоматическая проверка настоящим Chromium (Node.js >=20, установка инструментов вне репозитория; команды для Linux/WSL):
+### Браузерные тесты
+
+Запустите сервер через uv или Compose. Затем:
 
 ```bash
-npm install --prefix /tmp/plant-care-browser playwright@1.64.1
-PLAYWRIGHT_BROWSERS_PATH=/tmp/plant-care-browsers \
-  node /tmp/plant-care-browser/node_modules/playwright/cli.js install chromium
-NODE_PATH=/tmp/plant-care-browser/node_modules \
-  PLAYWRIGHT_BROWSERS_PATH=/tmp/plant-care-browsers \
-  node tests/browser.cjs
+npm ci
+npx --no-install playwright install --with-deps chromium
+npm run test:browser
 ```
 
-Сервер uv или Compose должен быть запущен. При отсутствии системных библиотек Chromium используйте штатный `playwright install-deps chromium` в своей среде; это может требовать прав администратора. `BASE_URL` меняет адрес сервера, `ARTIFACT_DIR` — каталог скриншотов (по умолчанию `/tmp/plant-care-evidence`). Скрипт проверяет сценарии, HTTP/сетевые ошибки, безопасность вывода и ширины 375/1280 px. Benchmark RAG пока не запускается.
+Установка системных библиотек Chromium может требовать прав администратора. Тесты в `tests/browser/` запускаются в изолированных контекстах. `BASE_URL` меняет адрес (по умолчанию `http://127.0.0.1:8000`). Отчёт — `playwright-report/`, результаты и снимки — `test-results/`; при сбое сохраняется trace. Просмотр: `npx --no-install playwright show-report`. Ручные установки в /tmp и NODE_PATH не требуются.
 
-Фактические результаты, скриншоты и оставшиеся шаги публикации — в [приёмке КТ №1](spec/product/kt1.md).
+### GitHub Actions
+
+Workflow `.github/workflows/ci.yaml` запускается при открытии/обновлении PR в `main`, push в `main` и вручную. Проверяет стиль, форматирование, Django и покрытие >=75%, затем собирает образ и запускает браузер против временного контейнера. Генерирует временный ключ задания; личный .env и GitHub Secrets не нужны. Сохраняет отчёты, логи при сбое и всегда удаляет временные контейнеры. Образ в реестр и сайт не публикуются.
+
+До первого реального запуска на GitHub workflow считается настроенным, а не подтверждённым remote-проверкой. Фактические результаты и оставшиеся шаги — в [приёмке КТ №1](spec/product/kt1.md). Benchmark RAG пока не запускается.
