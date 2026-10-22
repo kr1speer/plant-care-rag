@@ -1,3 +1,5 @@
+"""Route the demonstration page and question API."""
+
 from django.urls import path
 
 from app.assistant import views

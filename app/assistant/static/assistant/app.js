@@ -13,7 +13,7 @@
   const examples = [...document.querySelectorAll("[data-question]")];
   let busy = false;
 
-  examples.forEach(button => {
+  examples.forEach((button) => {
     button.addEventListener("click", () => {
       question.value = button.dataset.question;
       question.focus();
@@ -21,9 +21,16 @@
   });
 
   function validResult(result) {
-    return result && typeof result.answer === "string" &&
-      Array.isArray(result.sources) && result.sources.every(source =>
-        source && ["title", "fragment", "url"].every(key => typeof source[key] === "string"));
+    return (
+      result &&
+      typeof result.answer === "string" &&
+      Array.isArray(result.sources) &&
+      result.sources.every(
+        (source) =>
+          source &&
+          ["title", "fragment", "url"].every((key) => typeof source[key] === "string"),
+      )
+    );
   }
 
   function sourceCard(source, index) {
@@ -53,7 +60,7 @@
     return card;
   }
 
-  form.addEventListener("submit", async event => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (busy) return;
     error.hidden = true;
@@ -72,7 +79,9 @@
     busy = true;
     submit.disabled = true;
     question.readOnly = true;
-    examples.forEach(button => { button.disabled = true; });
+    examples.forEach((button) => {
+      button.disabled = true;
+    });
     form.setAttribute("aria-busy", "true");
     status.textContent = "Готовим демонстрационный ответ…";
     try {
@@ -92,27 +101,36 @@
         throw new Error("Сервер вернул некорректный ответ. Попробуйте ещё раз.");
       }
       if (!response.ok) {
-        throw new Error(typeof result?.error === "string" ? result.error : `Ошибка сервера (${response.status}). Попробуйте ещё раз.`);
+        throw new Error(
+          typeof result?.error === "string"
+            ? result.error
+            : `Ошибка сервера (${response.status}). Попробуйте ещё раз.`,
+        );
       }
       if (!validResult(result)) {
         throw new Error("Сервер вернул некорректный ответ. Попробуйте ещё раз.");
       }
       answerText.textContent = result.answer;
-      result.sources.forEach((source, index) => { sourcesList.append(sourceCard(source, index)); });
+      result.sources.forEach((source, index) => {
+        sourcesList.append(sourceCard(source, index));
+      });
       answerBox.hidden = false;
       sourcesBox.hidden = result.sources.length === 0;
       status.textContent = "Ответ готов.";
     } catch (failure) {
-      error.textContent = failure instanceof TypeError
-        ? "Не удалось связаться с сервером. Проверьте соединение и попробуйте ещё раз."
-        : failure.message;
+      error.textContent =
+        failure instanceof TypeError
+          ? "Не удалось связаться с сервером. Проверьте соединение и попробуйте ещё раз."
+          : failure.message;
       error.hidden = false;
       status.textContent = "";
     } finally {
       busy = false;
       submit.disabled = false;
       question.readOnly = false;
-      examples.forEach(button => { button.disabled = false; });
+      examples.forEach((button) => {
+        button.disabled = false;
+      });
       form.setAttribute("aria-busy", "false");
     }
   });

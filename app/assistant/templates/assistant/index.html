@@ -1,43 +1,52 @@
 {% load static %}
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Зелёный помощник</title>
-  <link rel="stylesheet" href="{% static 'assistant/style.css' %}">
-  <script src="{% static 'assistant/app.js' %}" defer></script>
-</head>
-<body>
-  <main>
-    <h1>Зелёный помощник</h1>
-    <p class="muted">Вопросы об уходе за комнатными растениями</p>
-    <p class="notice">Демонстрационная версия: BM25 и LLM не подключены</p>
-    <p id="demo-help">Доступны три подготовленных ответа по статьям корпуса. Выберите пример и нажмите «Спросить».</p>
-    <div class="examples" aria-label="Примеры вопросов">
-      {% for example in examples %}
-      <button type="button" class="example" data-question="{{ example.question }}">{{ example.question }}</button>
-      {% endfor %}
-    </div>
-    <form id="ask-form" action="{% url 'ask' %}" method="post">
-      {% csrf_token %}
-      <label for="question">Ваш вопрос</label>
-      <div class="form-row">
-        <input id="question" name="question" type="text" aria-describedby="demo-help" placeholder="Выберите пример или введите вопрос" required>
-        <button id="submit" type="submit">Спросить</button>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Зелёный помощник</title>
+    <link rel="stylesheet" href="{% static 'assistant/style.css' %}">
+    <script src="{% static 'assistant/app.js' %}" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>Зелёный помощник</h1>
+      <p class="muted">Вопросы об уходе за комнатными растениями</p>
+      <p class="notice">Демонстрационная версия: BM25 и LLM не подключены</p>
+      <p id="demo-help">Доступны три подготовленных ответа по статьям корпуса. Выберите пример и нажмите «Спросить».</p>
+      <div class="examples" aria-label="Примеры вопросов">
+        {% for example in examples %}
+          <button type="button"
+                  class="example"
+                  data-question="{{ example.question }}">{{ example.question }}</button>
+        {% endfor %}
       </div>
-    </form>
-    <noscript><p>Для отправки вопроса включите JavaScript в браузере.</p></noscript>
-    <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
-    <p id="error" class="error" role="alert" hidden></p>
-    <section id="answer" class="card" aria-labelledby="answer-heading" hidden>
-      <h2 id="answer-heading">Ответ</h2>
-      <p id="answer-text"></p>
-    </section>
-    <section id="sources" aria-labelledby="sources-heading" hidden>
-      <h2 id="sources-heading">Источники</h2>
-      <div id="sources-list"></div>
-    </section>
-  </main>
-</body>
+      <form id="ask-form" action="{% url 'ask' %}" method="post">
+        {% csrf_token %}
+        <label for="question">Ваш вопрос</label>
+        <div class="form-row">
+          <input id="question"
+                 name="question"
+                 type="text"
+                 aria-describedby="demo-help"
+                 placeholder="Выберите пример или введите вопрос"
+                 required>
+          <button id="submit" type="submit">Спросить</button>
+        </div>
+      </form>
+      <noscript>
+        <p>Для отправки вопроса включите JavaScript в браузере.</p>
+      </noscript>
+      <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
+      <p id="error" class="error" role="alert" hidden></p>
+      <section id="answer" class="card" aria-labelledby="answer-heading" hidden>
+        <h2 id="answer-heading">Ответ</h2>
+        <p id="answer-text"></p>
+      </section>
+      <section id="sources" aria-labelledby="sources-heading" hidden>
+        <h2 id="sources-heading">Источники</h2>
+        <div id="sources-list"></div>
+      </section>
+    </main>
+  </body>
 </html>
