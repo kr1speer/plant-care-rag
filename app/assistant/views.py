@@ -1,9 +1,18 @@
 import json
 
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET
 
+from .demo import EXAMPLES
 from .services import answer_question
+
+
+@ensure_csrf_cookie
+@require_GET
+def home(request):
+    return render(request, "assistant/index.html", {"examples": EXAMPLES})
 
 
 @ensure_csrf_cookie
@@ -35,6 +44,6 @@ def ask(request):
 
 def csrf_failure(request, reason=""):
     return JsonResponse(
-        {"error": "Получите CSRF-cookie через GET /ask и передайте токен в X-CSRFToken."},
+        {"error": "Обновите главную страницу или получите CSRF-cookie через GET /ask и передайте токен в X-CSRFToken."},
         status=403,
     )

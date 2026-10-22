@@ -18,13 +18,13 @@ class AskAPITests(SimpleTestCase):
             **kwargs,
         )
 
-    def test_valid_question_returns_stub(self):
+    def test_unsupported_question_explains_demo_limit(self):
         response = self.post({"question": "Как поливать монстеру?"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
             {
-                "answer": "Тестовый ответ. Поиск BM25 и LLM пока не подключены.",
+                "answer": "Это демонстрационная версия. Выберите один из трёх примеров вопросов. Поиск по корпусу пока не подключён",
                 "sources": [],
             },
         )
