@@ -1,0 +1,1 @@
+"""Green Assistant Django project."""

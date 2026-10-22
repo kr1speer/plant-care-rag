@@ -1,0 +1,15 @@
+.venv/
+node_modules/
+.serena/
+.git/
+data/corpus/
+benchmark/
+LICENSE
+uv.lock
+*.py
+**/*.html
+spec/product/evidence/
+coverage.xml
+htmlcov/
+playwright-report/
+test-results/

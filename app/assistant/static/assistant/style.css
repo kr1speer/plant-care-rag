@@ -1,0 +1,111 @@
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: #fff;
+  color: #222;
+}
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 16px;
+}
+h1 {
+  color: #2e7d33;
+  margin: 0 0 8px;
+}
+h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+.muted {
+  color: #595959;
+}
+.notice {
+  padding: 12px;
+  border-left: 4px solid #2e7d33;
+  background: #f2f7f2;
+}
+form {
+  margin: 24px 0;
+}
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #aaa;
+  border-radius: 8px;
+  background: #f2f7f2;
+  font-size: 16px;
+}
+button {
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #2e7d33;
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 3px solid #1b5e20;
+  outline-offset: 3px;
+}
+.examples {
+  display: grid;
+  gap: 8px;
+}
+.example {
+  background: #f2f7f2;
+  color: #245f28;
+  text-align: left;
+  font-weight: normal;
+}
+.card {
+  background: #f2f7f2;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+  overflow-wrap: anywhere;
+}
+.card p {
+  margin: 4px 0;
+  white-space: pre-line;
+}
+.source {
+  margin-bottom: 12px;
+}
+.source .fragment {
+  color: #595959;
+  font-size: 14px;
+}
+.source a {
+  color: #245f28;
+  font-size: 14px;
+}
+.error {
+  color: #9b1c1c;
+}
+@media (max-width: 420px) {
+  main {
+    padding-top: 24px;
+  }
+  .form-row {
+    flex-direction: column;
+  }
+}
