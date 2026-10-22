@@ -1,12 +1,32 @@
 """Local development settings; no database or external services are required."""
 
+import os
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-SECRET_KEY = "django-insecure-green-assistant-local-development-only"
-DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+load_dotenv(BASE_DIR / ".env", override=False)
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "Set a nonempty DJANGO_SECRET_KEY in .env or the environment."
+    )
+
+debug_value = os.environ.get("DJANGO_DEBUG", "false").strip().lower()
+if debug_value not in {"true", "false"}:
+    raise ImproperlyConfigured("DJANGO_DEBUG must be true or false.")
+DEBUG = debug_value == "true"
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]"
+    ).split(",")
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
