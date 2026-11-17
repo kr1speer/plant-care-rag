@@ -73,7 +73,9 @@ class QuestionFileTests(SimpleTestCase):
         """15 questions: 10 regular with ≥3 known relevant IDs and 5 traps."""
         questions = read_questions()
         known = {e["id"] for e in load_registry()}
-        self.assertEqual([q["id"] for q in questions], [f"Q{i:02d}" for i in range(1, 16)])
+        self.assertEqual(
+            [q["id"] for q in questions], [f"Q{i:02d}" for i in range(1, 16)]
+        )
         self.assertEqual(sum(q["type"] == "regular" for q in questions), 10)
         self.assertEqual(sum(q["type"] == "trap" for q in questions), 5)
         for q in questions:
@@ -85,7 +87,9 @@ class QuestionFileTests(SimpleTestCase):
                 self.assertTrue(q["question"].strip())
                 if q["type"] == "regular":
                     self.assertGreaterEqual(len(set(q["relevant_ids"])), 3)
-                    self.assertEqual(len(set(q["relevant_ids"])), len(q["relevant_ids"]))
+                    self.assertEqual(
+                        len(set(q["relevant_ids"])), len(q["relevant_ids"])
+                    )
                     self.assertLessEqual(set(q["relevant_ids"]), known)
                     self.assertNotEqual(q["expected_answer"], REFUSAL)
                 else:
@@ -248,7 +252,11 @@ class RunScriptTests(SimpleTestCase):
 
         def fake(question: str) -> dict:
             refused = "монстер" in question
-            return {"answer": REFUSAL if refused else "Ответ", "sources": [], "refused": refused}
+            return {
+                "answer": REFUSAL if refused else "Ответ",
+                "sources": [],
+                "refused": refused,
+            }
 
         questions = [q for q in read_questions() if q["id"] in {"Q01", "Q11"}]
         records = self.run.run_benchmark(questions, answerer=fake)
@@ -263,4 +271,6 @@ class RunScriptTests(SimpleTestCase):
             first = self.run.result_path(Path(tmp), date(2026, 11, 17))
             first.write_text("{}", encoding="utf-8")
             second = self.run.result_path(Path(tmp), date(2026, 11, 17))
-        self.assertEqual((first.name, second.name), ("2026-11-17.json", "2026-11-17-2.json"))
+        self.assertEqual(
+            (first.name, second.name), ("2026-11-17.json", "2026-11-17-2.json")
+        )

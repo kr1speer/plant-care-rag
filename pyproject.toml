@@ -6,6 +6,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "Django>=5.2,<5.3",
     "python-dotenv>=1.2.4",
+    "snowballstemmer>=3.0.1",
 ]
 
 [tool.uv]

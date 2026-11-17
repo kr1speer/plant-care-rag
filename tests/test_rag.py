@@ -106,7 +106,9 @@ class RegistryTests(SimpleTestCase):
     def test_real_registry_has_thirty_documents(self):
         """IDs D01–D30 follow file numbers and match file headers."""
         registry = load_registry()
-        self.assertEqual([e["id"] for e in registry], [f"D{i:02d}" for i in range(1, 31)])
+        self.assertEqual(
+            [e["id"] for e in registry], [f"D{i:02d}" for i in range(1, 31)]
+        )
         for entry in registry:
             with self.subTest(doc=entry["id"]):
                 self.assertTrue(entry["file"].startswith(entry["id"][1:] + "_"))
@@ -207,7 +209,7 @@ class RetrieverTests(SimpleTestCase):
         return Retriever(fragments, tokenizer=RAW)
 
     def test_lecture_top_two(self):
-        """k = 2 returns A and B with lecture scores and full fields."""
+        """With k = 2 returns A and B with lecture scores and full fields."""
         results = self.lecture_retriever().search(LECTURE_QUESTION, k=2)
         self.assertEqual([r["doc_id"] for r in results], ["A", "B"])
         self.assertAlmostEqual(results[0]["score"], 0.940, places=3)
@@ -241,7 +243,7 @@ class RetrieverTests(SimpleTestCase):
         self.assertEqual(retriever.search("   ?!"), [])
 
     def test_invalid_k(self):
-        """k below one is rejected."""
+        """A depth k below one is rejected."""
         with self.assertRaises(ValueError):
             self.lecture_retriever().search(LECTURE_QUESTION, k=0)
 
