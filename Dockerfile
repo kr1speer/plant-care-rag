@@ -14,7 +14,8 @@ RUN uv sync --locked --no-dev
 COPY manage.py ./
 COPY app ./app
 COPY tests ./tests
-COPY data/corpus ./data/corpus
+COPY data ./data
+COPY benchmark ./benchmark
 
 EXPOSE 8000
 CMD ["uv", "run", "--no-sync", "python", "manage.py", "runserver", "0.0.0.0:8000", "--noreload"]
