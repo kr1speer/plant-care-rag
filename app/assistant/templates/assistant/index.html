@@ -17,7 +17,7 @@
         {% for example in examples %}
           <button type="button"
                   class="example"
-                  data-question="{{ example.question }}">{{ example.question }}</button>
+                  data-question="{{ example }}">{{ example }}</button>
         {% endfor %}
       </div>
       <form id="ask-form" action="{% url 'ask' %}" method="post">

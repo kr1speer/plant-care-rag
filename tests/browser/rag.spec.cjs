@@ -192,6 +192,19 @@ for (const [status, text] of [
   });
 }
 
+for (const [status, body, message] of [
+  [502, "", "Сервис LLM вернул некорректный ответ"],
+  [503, "<html>Unavailable</html>", "Сервис LLM временно недоступен"],
+]) {
+  test(`HTTP ${status} with a non-JSON body uses the status`, async ({ page }) => {
+    await page.route("**/ask", (route) =>
+      route.fulfill({ status, contentType: "text/html", body }),
+    );
+    await ask(page);
+    await expect(page.locator("#error")).toContainText(message);
+  });
+}
+
 for (const [name, body] of [
   ["invalid JSON", "<html>bad response</html>"],
   ["missing refused", JSON.stringify({ answer: "bad", sources: [] })],
@@ -215,6 +228,22 @@ test("network failure keeps input and allows retry", async ({ page, context }) =
   await expect(page.locator("#error")).toBeVisible();
   await expect(page.getByLabel("Ваш вопрос")).toHaveValue(examples[0]);
   await context.setOffline(false);
+  await mockAsk(page, answered);
+  await ask(page);
+  await expect(page.locator("#answer-text")).toContainText("недостатком света");
+});
+
+test("request timeout shows a message and allows retry", async ({ page }) => {
+  // Shorten the 90 s limit so the timeout branch runs in test time.
+  await page.addInitScript(() => {
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    AbortSignal.timeout = () => timeout(200);
+  });
+  await page.reload();
+  await page.route("**/ask", () => {}); // never answers
+  await ask(page);
+  await expect(page.locator("#error")).toContainText("Ответ не пришёл за 90 секунд");
+  await expect(page.getByLabel("Ваш вопрос")).toHaveValue(examples[0]);
   await mockAsk(page, answered);
   await ask(page);
   await expect(page.locator("#answer-text")).toContainText("недостатком света");

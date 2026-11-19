@@ -114,12 +114,13 @@
       let result;
       try {
         result = await response.json();
-      } catch {
-        throw new Error("Сервер вернул некорректный ответ. Попробуйте ещё раз.");
+      } catch (failure) {
+        if (failure.name !== "SyntaxError") throw failure;
+        result = null;
       }
       if (!response.ok) {
         throw new Error(
-          typeof result?.error === "string"
+          typeof result?.error === "string" && result.error.trim()
             ? result.error
             : errorByStatus(response.status),
         );
