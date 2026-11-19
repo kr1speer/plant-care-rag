@@ -1,1 +1,1 @@
-"""Django configuration for the local KT1 demonstration."""
+"""Django configuration for the plant care assistant."""

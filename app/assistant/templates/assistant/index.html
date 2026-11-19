@@ -12,8 +12,7 @@
     <main>
       <h1>Зелёный помощник</h1>
       <p class="muted">Вопросы об уходе за комнатными растениями</p>
-      <p class="notice">Демонстрационная версия: BM25 и LLM не подключены</p>
-      <p id="demo-help">Доступны три подготовленных ответа по статьям корпуса. Выберите пример и нажмите «Спросить».</p>
+      <p id="help">Задайте любой вопрос об уходе за комнатными растениями — ответ будет собран по статьям корпуса, с источниками. Примеры ниже — только подсказки.</p>
       <div class="examples" aria-label="Примеры вопросов">
         {% for example in examples %}
           <button type="button"
@@ -28,8 +27,8 @@
           <input id="question"
                  name="question"
                  type="text"
-                 aria-describedby="demo-help"
-                 placeholder="Выберите пример или введите вопрос"
+                 aria-describedby="help"
+                 placeholder="Например: как часто поливать орхидею?"
                  required>
           <button id="submit" type="submit">Спросить</button>
         </div>
@@ -39,6 +38,13 @@
       </noscript>
       <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
       <p id="error" class="error" role="alert" hidden></p>
+      <section id="refusal"
+               class="card refusal"
+               aria-labelledby="refusal-heading"
+               hidden>
+        <h2 id="refusal-heading">Ответа в документах нет</h2>
+        <p id="refusal-text"></p>
+      </section>
       <section id="answer" class="card" aria-labelledby="answer-heading" hidden>
         <h2 id="answer-heading">Ответ</h2>
         <p id="answer-text"></p>

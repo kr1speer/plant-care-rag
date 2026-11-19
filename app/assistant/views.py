@@ -1,4 +1,4 @@
-"""Serve the demonstration page and the CSRF-protected JSON question API."""
+"""Serve the home page and the CSRF-protected JSON question API."""
 
 import json
 
@@ -15,13 +15,13 @@ from .services import answer_question
 @ensure_csrf_cookie
 @require_GET
 def home(request):
-    """Render the demo page and establish its CSRF cookie.
+    """Render the home page and establish its CSRF cookie.
 
     Args:
         request: Incoming Django HTTP request.
 
     Returns:
-        The rendered HTML response with the supported example questions.
+        The rendered HTML response with example questions as hints.
     """
     return render(request, "assistant/index.html", {"examples": EXAMPLES})
 

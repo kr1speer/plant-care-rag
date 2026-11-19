@@ -1,4 +1,4 @@
-"""Route the demonstration page and question API."""
+"""Route the home page and question API."""
 
 from django.urls import path
 

@@ -6,12 +6,16 @@
   const submit = document.getElementById("submit");
   const status = document.getElementById("status");
   const error = document.getElementById("error");
+  const refusalBox = document.getElementById("refusal");
+  const refusalText = document.getElementById("refusal-text");
   const answerBox = document.getElementById("answer");
   const answerText = document.getElementById("answer-text");
   const sourcesBox = document.getElementById("sources");
   const sourcesList = document.getElementById("sources-list");
   const examples = [...document.querySelectorAll("[data-question]")];
   let busy = false;
+  const SLOW_MS = 8000;
+  const TIMEOUT_MS = 90000;
 
   examples.forEach((button) => {
     button.addEventListener("click", () => {
@@ -24,6 +28,7 @@
     return (
       result &&
       typeof result.answer === "string" &&
+      typeof result.refused === "boolean" &&
       Array.isArray(result.sources) &&
       result.sources.every(
         (source) =>
@@ -31,6 +36,13 @@
           ["title", "fragment", "url"].every((key) => typeof source[key] === "string"),
       )
     );
+  }
+
+  function errorByStatus(code) {
+    if (code === 502)
+      return "Сервис LLM вернул некорректный ответ. Попробуйте ещё раз.";
+    if (code === 503) return "Сервис LLM временно недоступен. Попробуйте позже.";
+    return `Ошибка сервера (${code}). Попробуйте ещё раз.`;
   }
 
   function sourceCard(source, index) {
@@ -65,6 +77,7 @@
     if (busy) return;
     error.hidden = true;
     answerBox.hidden = true;
+    refusalBox.hidden = true;
     sourcesBox.hidden = true;
     sourcesList.replaceChildren();
     status.textContent = "";
@@ -83,7 +96,10 @@
       button.disabled = true;
     });
     form.setAttribute("aria-busy", "true");
-    status.textContent = "Готовим демонстрационный ответ…";
+    status.textContent = "Ищем в статьях и готовим ответ…";
+    const slow = setTimeout(() => {
+      status.textContent = "Ответ готовится дольше обычного, подождите…";
+    }, SLOW_MS);
     try {
       const response = await fetch(form.action, {
         method: "POST",
@@ -93,6 +109,7 @@
           "X-CSRFToken": form.querySelector("[name=csrfmiddlewaretoken]").value,
         },
         body: JSON.stringify({ question: value }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       let result;
       try {
@@ -104,27 +121,36 @@
         throw new Error(
           typeof result?.error === "string"
             ? result.error
-            : `Ошибка сервера (${response.status}). Попробуйте ещё раз.`,
+            : errorByStatus(response.status),
         );
       }
       if (!validResult(result)) {
         throw new Error("Сервер вернул некорректный ответ. Попробуйте ещё раз.");
       }
-      answerText.textContent = result.answer;
-      result.sources.forEach((source, index) => {
-        sourcesList.append(sourceCard(source, index));
-      });
-      answerBox.hidden = false;
-      sourcesBox.hidden = result.sources.length === 0;
-      status.textContent = "Ответ готов.";
+      if (result.refused) {
+        refusalText.textContent = result.answer;
+        refusalBox.hidden = false;
+        status.textContent = "В документах нет ответа на этот вопрос.";
+      } else {
+        answerText.textContent = result.answer;
+        result.sources.forEach((source, index) => {
+          sourcesList.append(sourceCard(source, index));
+        });
+        answerBox.hidden = false;
+        sourcesBox.hidden = result.sources.length === 0;
+        status.textContent = "Ответ готов.";
+      }
     } catch (failure) {
       error.textContent =
-        failure instanceof TypeError
-          ? "Не удалось связаться с сервером. Проверьте соединение и попробуйте ещё раз."
-          : failure.message;
+        failure.name === "TimeoutError"
+          ? "Ответ не пришёл за 90 секунд. Попробуйте ещё раз позже."
+          : failure instanceof TypeError
+            ? "Не удалось связаться с сервером. Проверьте соединение и попробуйте ещё раз."
+            : failure.message;
       error.hidden = false;
       status.textContent = "";
     } finally {
+      clearTimeout(slow);
       busy = false;
       submit.disabled = false;
       question.readOnly = false;

@@ -1,1 +1,1 @@
-"""Demonstration interface and question-answering application."""
+"""Web interface and question-answering application."""

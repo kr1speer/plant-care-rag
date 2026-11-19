@@ -1,9 +1,4 @@
-"""Curated KT1 fixtures, not retrieval or generation. Source excerpts are verbatim."""
-
-UNSUPPORTED_ANSWER = (
-    "Это демонстрационная версия. Выберите один из трёх примеров вопросов. "
-    "Поиск по корпусу пока не подключён"
-)
+"""Example questions shown on the home page as hints for the user."""
 
 EXAMPLES = (
     {
