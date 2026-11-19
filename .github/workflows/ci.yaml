@@ -1,4 +1,4 @@
-name: Quality and KT1 tests
+name: Quality and tests
 
 on:
   pull_request:
