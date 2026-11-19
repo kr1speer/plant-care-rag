@@ -1,4 +1,4 @@
-"""Verify demo answers, corpus attribution and the Django interface."""
+"""Verify the home page, example hints and CSRF bootstrap."""
 
 import json
 
@@ -52,13 +52,12 @@ class DemoTests(SimpleTestCase):
             HTTP_X_CSRFTOKEN=self.client.cookies["csrftoken"].value,
         )
 
-    def test_home_serves_demo_questions_and_csrf_token(self):
-        """Serve the supported examples, token and namespaced asset references."""
+    def test_home_serves_example_hints_and_csrf_token(self):
+        """Serve the example hints, token and namespaced asset references."""
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response, "Демонстрационная версия: BM25 и LLM не подключены"
-        )
+        self.assertNotContains(response, "Демонстрационная версия")
+        self.assertNotContains(response, "три подготовленных")
         self.assertContains(response, 'name="csrfmiddlewaretoken"')
         self.assertIn("csrftoken", response.cookies)
         for question, *_ in CASES:
