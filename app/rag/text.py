@@ -1,7 +1,6 @@
 """Russian tokenization for BM25: normalization, stop words and stemming."""
 
 import re
-from functools import cache
 
 import snowballstemmer
 
@@ -22,16 +21,6 @@ STOPWORDS = frozenset(
     можно ли нужно нужен нужна нужны
     """.split()
 )
-
-
-@cache
-def _stemmer():
-    """Create the Russian Snowball stemmer once per process.
-
-    Returns:
-        A snowballstemmer stemmer for Russian.
-    """
-    return snowballstemmer.stemmer("russian")
 
 
 def normalize(text: str) -> str:
@@ -63,5 +52,5 @@ def tokenize(
     if remove_stopwords:
         words = [word for word in words if word not in STOPWORDS]
     if stem:
-        words = _stemmer().stemWords(words)
+        words = snowballstemmer.stemmer("russian").stemWords(words)
     return words

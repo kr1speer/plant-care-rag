@@ -66,7 +66,7 @@ for (const [question, fact, title] of examples) {
   });
 }
 
-test("normalization and replacement of an earlier answer", async ({ page }) => {
+test("replacement of an earlier answer", async ({ page }) => {
   await ask(page, examples[0][0]);
   await ask(page, "  КАКАЯ  ТЕМПЕРАТУРА НУЖНА ФИКУСУ БЕНДЖАМИНА ЛЕТОМ И ЗИМОЙ!!!  ");
   await expect(page.locator("#answer-text")).toContainText("25–30 °C");
@@ -79,11 +79,11 @@ for (const question of [
   "Когда пересаживать фикус?",
   "Как вырастить помидоры на балконе?",
 ]) {
-  test(`unsupported: ${question}`, async ({ page }) => {
+  test(`refusal: ${question}`, async ({ page }) => {
     await ask(page, examples[0][0]);
     await ask(page, question);
     await expect(page.locator("#answer-text")).toContainText(
-      "Выберите один из трёх примеров",
+      "В документах нет этой информации",
     );
     await expect(page.locator("#sources")).toBeHidden();
     await expect(page.locator("#sources-list")).toBeEmpty();
@@ -135,7 +135,7 @@ test("pending request hides old results and blocks duplicate submission", async 
   }
 });
 
-for (const status of [403, 500]) {
+for (const status of [403, 502, 503]) {
   test(`HTTP ${status} and recovery`, async ({ page }) => {
     await page.route("**/ask", (route) =>
       route.fulfill({ status, json: { error: `Ошибка ${status}` } }),
