@@ -1,6 +1,8 @@
 """Verify JSON validation, HTTP methods and CSRF protection."""
 
 import json
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 from django.test import Client, SimpleTestCase
 
@@ -30,18 +32,6 @@ class AskAPITests(SimpleTestCase):
             content_type="application/json",
             HTTP_X_CSRFTOKEN=self.csrf_token,
             **kwargs,
-        )
-
-    def test_unsupported_question_explains_demo_limit(self):
-        """Return the demo limitation rather than inventing a plant answer."""
-        response = self.post({"question": "Как поливать монстеру?"})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {
-                "answer": "Это демонстрационная версия. Выберите один из трёх примеров вопросов. Поиск по корпусу пока не подключён",
-                "sources": [],
-            },
         )
 
     def test_invalid_question(self):
@@ -142,3 +132,96 @@ class AskAPITests(SimpleTestCase):
         self.assertEqual(response.status_code, 405)
         self.assertEqual(response["Allow"], "POST")
         self.assertIn("csrftoken", response.cookies)
+
+    @patch("app.assistant.services.complete")
+    def test_grounded_answer(self, complete):
+        """Send actual BM25 fragments and return only the cited source."""
+        complete.return_value = {
+            "answer": "Нужен свет. [D02]",
+            "refused": False,
+            "sources": ["D02", "D02"],
+        }
+        response = self.post({"question": "Почему у монстеры листья без прорезей?"})
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertFalse(result["refused"])
+        self.assertEqual(result["answer"], "Нужен свет. [D02]")
+        self.assertEqual([source["doc_id"] for source in result["sources"]], ["D02"])
+        messages = complete.call_args.args[0]
+        self.assertEqual([message["role"] for message in messages], ["system", "user"])
+        self.assertIn("[D02]", messages[1]["content"])
+        self.assertIn(result["sources"][0]["fragment"], messages[1]["content"])
+
+    @patch("app.assistant.services.complete")
+    def test_empty_search_skips_llm(self, complete):
+        """Refuse immediately when no indexed term matches."""
+        response = self.post({"question": "zxqvzxqv"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "answer": "В документах нет этой информации",
+                "sources": [],
+                "refused": True,
+            },
+        )
+        complete.assert_not_called()
+
+    @patch("app.assistant.services.complete")
+    def test_model_refusal(self, complete):
+        """Return a refusal if the model finds insufficient evidence."""
+        complete.return_value = {"answer": "", "refused": True, "sources": []}
+        response = self.post({"question": "Монстера"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["refused"])
+        self.assertEqual(response.json()["sources"], [])
+
+    @patch("app.assistant.services.complete")
+    def test_invalid_model_response(self, complete):
+        """Report malformed or ungrounded replies as provider errors."""
+        for reply in (
+            {},
+            {"refused": True},
+            {"answer": "", "refused": True, "sources": ["D02"]},
+            {"answer": "Ответ", "refused": False, "sources": ["D99"]},
+            {"answer": "Ответ", "refused": False, "sources": []},
+        ):
+            with self.subTest(reply=reply):
+                complete.return_value = reply
+                response = self.post({"question": "Монстера"})
+                self.assertEqual(response.status_code, 502)
+                self.assertIn("error", response.json())
+
+    def test_missing_llm_configuration(self):
+        """Return a temporary service error when no provider is configured."""
+        with self.settings(LLM_API_KEY="", LLM_MODEL="", LLM_BASE_URL=""):
+            response = self.post({"question": "Монстера"})
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("недоступен", response.json()["error"])
+
+    @patch("app.assistant.llm.build_opener")
+    def test_provider_errors(self, build_opener):
+        """Map timeout and rejected credentials to sanitized API errors."""
+        with self.settings(
+            LLM_API_KEY="test-token",
+            LLM_MODEL="test-model",
+            LLM_BASE_URL="http://localhost:9999/v1/",
+        ):
+            for error, status in (
+                (TimeoutError("internal timeout"), 503),
+                (HTTPError("", 401, "private provider detail", {}, None), 502),
+            ):
+                with self.subTest(status=status):
+                    request = build_opener.return_value.open
+                    request.side_effect = error
+                    response = self.post({"question": "Монстера"})
+                    self.assertEqual(response.status_code, status)
+                    self.assertNotContains(
+                        response, "private provider detail", status_code=status
+                    )
+                    self.assertNotContains(response, "test-token", status_code=status)
+                    self.assertEqual(request.call_args.kwargs, {"timeout": 20})
+                    self.assertEqual(
+                        request.call_args.args[0].full_url,
+                        "http://localhost:9999/v1/chat/completions",
+                    )

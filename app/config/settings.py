@@ -1,4 +1,4 @@
-"""Local development settings; no database or external services are required."""
+"""Settings for local Django and optional LLM integration."""
 
 import os
 from pathlib import Path
@@ -60,3 +60,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CSRF_FAILURE_VIEW = "app.assistant.views.csrf_failure"
+
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
+LLM_MODEL = os.environ.get("LLM_MODEL", "").strip()
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "").strip()

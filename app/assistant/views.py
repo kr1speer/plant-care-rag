@@ -8,6 +8,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
 from .demo import EXAMPLES
+from .llm import LLMError
 from .services import answer_question
 
 
@@ -27,13 +28,13 @@ def home(request):
 
 @ensure_csrf_cookie
 def ask(request):
-    """Validate a JSON question and return a demonstration answer.
+    """Validate a JSON question and return a grounded answer.
 
     Args:
         request: Django request containing JSON with a question string.
 
     Returns:
-        A JSON response with answer/sources, or an error with HTTP 400/405/415.
+        A JSON answer, refusal, validation error or provider error.
         CSRF validation runs in middleware and can return HTTP 403 first.
     """
     if request.method != "POST":
@@ -62,7 +63,11 @@ def ask(request):
             {"error": "Введите непустой вопрос в поле question."}, status=400
         )
 
-    return JsonResponse(answer_question(question.strip()))
+    try:
+        result = answer_question(question.strip())
+    except LLMError as error:
+        return JsonResponse({"error": error.message}, status=error.status)
+    return JsonResponse(result)
 
 
 def csrf_failure(request, reason=""):

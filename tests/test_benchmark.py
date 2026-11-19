@@ -8,6 +8,7 @@ import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 from django.conf import settings
 from django.test import SimpleTestCase
@@ -188,7 +189,8 @@ class RunScriptTests(SimpleTestCase):
             code = self.run.main(list(argv))
         return code, out.getvalue(), err.getvalue()
 
-    def test_retrieval_only_run_and_rescore(self):
+    @patch("app.assistant.services.complete")
+    def test_retrieval_only_run_and_rescore(self, complete):
         """A run saves results and --score recomputes metrics after labeling."""
         with tempfile.TemporaryDirectory() as tmp:
             code, out, _ = self.call_main(
@@ -222,6 +224,7 @@ class RunScriptTests(SimpleTestCase):
             rescored = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(rescored["metrics"]["accuracy"], 1.0)
             self.assertIn("Accuracy", out)
+            complete.assert_not_called()
 
     def test_score_rejects_bad_verdict(self):
         """An invalid manual label stops rescoring with an error."""
@@ -241,11 +244,12 @@ class RunScriptTests(SimpleTestCase):
             with self.subTest(bad=bad):
                 self.assertFalse(self.run.is_valid_answer(bad))
 
-    def test_current_service_falls_back_to_retrieval_only(self):
-        """The KT1 demo service has no refused field and is not used."""
-        answerer, reason = self.run.resolve_answerer("Вопрос?")
+    def test_unconfigured_service_falls_back_to_retrieval_only(self):
+        """A question with matches requires a configured provider."""
+        with self.settings(LLM_API_KEY=""):
+            answerer, reason = self.run.resolve_answerer("Монстера")
         self.assertIsNone(answerer)
-        self.assertIn("формат", reason)
+        self.assertIn("LLMUnavailable", reason)
 
     def test_full_mode_records_answers(self):
         """A compatible answerer fills answer and refused fields."""
@@ -274,3 +278,18 @@ class RunScriptTests(SimpleTestCase):
         self.assertEqual(
             (first.name, second.name), ("2026-11-17.json", "2026-11-17-2.json")
         )
+
+    @patch("app.assistant.services.complete")
+    def test_full_benchmark_uses_integrated_service(self, complete):
+        """Save 15 results from the integrated service with a deterministic model."""
+        complete.return_value = {"answer": REFUSAL, "refused": True, "sources": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, errors = self.call_main("--results-dir", tmp)
+            self.assertEqual((code, errors), (0, ""))
+            path = next(Path(tmp).glob("*.json"))
+            data = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(data["mode"], "full")
+        self.assertEqual(len(data["questions"]), 15)
+        self.assertTrue(all(row["answer"] == REFUSAL for row in data["questions"]))
+        complete.assert_called()

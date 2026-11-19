@@ -104,6 +104,11 @@ jobs:
       - run: docker compose config --quiet
       - run: docker compose build
       - run: docker compose up -d --no-build
+        env:
+          LLM_API_KEY: browser-test
+          LLM_MODEL: browser-test
+          LLM_BASE_URL: http://127.0.0.1:8001/v1
+      - run: docker compose exec -d web uv run --no-sync python tests/browser/llm_stub.py
       - name: Wait for the application
         shell: bash
         run: |

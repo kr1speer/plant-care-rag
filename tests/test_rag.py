@@ -49,6 +49,13 @@ def make_fragment(doc_id: str, text: str, section: str = "Раздел") -> Frag
 class TokenizeTests(SimpleTestCase):
     """Tokenizer normalization, stop words and stemming."""
 
+    @mock.patch("app.rag.text.snowballstemmer.stemmer")
+    def test_tokenization_does_not_share_stemmer_state(self, factory):
+        """Give each tokenization call an independent mutable stemmer."""
+        tokenize("Монстера")
+        tokenize("Фикус")
+        self.assertEqual(factory.call_args_list, [mock.call("russian")] * 2)
+
     def test_raw_tokens_are_lowercase_words(self):
         """Lowercase, ё → е, stress marks removed, punctuation dropped."""
         self.assertEqual(
