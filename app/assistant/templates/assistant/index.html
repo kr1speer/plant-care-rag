@@ -10,16 +10,20 @@
   </head>
   <body>
     <main>
-      <h1>Зелёный помощник</h1>
-      <p class="muted">Вопросы об уходе за комнатными растениями</p>
-      <p id="help">Задайте любой вопрос об уходе за комнатными растениями — ответ будет собран по статьям корпуса, с источниками. Примеры ниже — только подсказки.</p>
-      <div class="examples" aria-label="Примеры вопросов">
-        {% for example in examples %}
-          <button type="button"
-                  class="example"
-                  data-question="{{ example }}">{{ example }}</button>
-        {% endfor %}
-      </div>
+      <header class="hero">
+        <div class="intro">
+          <p class="kicker">Комнатные растения</p>
+          <h1>Зелёный <em>помощник</em></h1>
+          <p id="help">Спросите об уходе за вашим растением. В ответе вы найдёте выдержки из статей и ссылки на источники.</p>
+        </div>
+        <figure>
+          <img src="{% static 'assistant/monstera.jpg' %}"
+               alt="Резные листья монстеры"
+               width="1536"
+               height="1024">
+          <figcaption lang="la">Monstera deliciosa</figcaption>
+        </figure>
+      </header>
       <form id="ask-form" action="{% url 'ask' %}" method="post">
         {% csrf_token %}
         <label for="question">Ваш вопрос</label>
@@ -52,6 +56,17 @@
       <section id="sources" aria-labelledby="sources-heading" hidden>
         <h2 id="sources-heading">Источники</h2>
         <div id="sources-list"></div>
+      </section>
+      <section class="suggestions" aria-labelledby="examples-heading">
+        <h2 id="examples-heading">Примеры вопросов</h2>
+        <div class="examples">
+          {% for example in examples %}
+            <button type="button" class="example" data-question="{{ example }}">
+              <span>{{ example }}</span>
+              <span class="arrow" aria-hidden="true">↗</span>
+            </button>
+          {% endfor %}
+        </div>
       </section>
     </main>
   </body>
