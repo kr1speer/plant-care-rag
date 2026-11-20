@@ -164,7 +164,7 @@ retrieve(question: str, k: int = 3) -> list[dict]
 1. **Recall@3** — среднее по 10 обычным вопросам `|relevant_ids ∩ top-3| / |relevant_ids|`.
 2. **MRR@3** — среднее по 10 обычным вопросам `1 / ранг` первого релевантного документа в top-3, иначе 0.
 3. **Accuracy** — доля обычных вопросов с ручной оценкой `verdict = "correct"` (полностью правильный ответ) из 10. Считается, только когда размечены все 10; иначе `null` и число размеченных.
-4. **Correct Rejection Rate** — доля ловушек с `refused = true` из 5. Без `answer_question` — `null`.
+4. **Correct Rejection Rate** — доля ловушек с `refused = true` из 5; ловушка с ошибкой LLM — не отказ. Без `answer_question` — `null`. Ловушки в Recall@3 и MRR@3 не входят.
 
 ### Запуск
 
@@ -176,7 +176,12 @@ uv run python benchmark/run.py                    # поиск + answer_question
 uv run python benchmark/run.py --score benchmark/results/<файл>.json   # пересчёт после разметки
 ```
 
-Без `--retrieval-only` скрипт импортирует `answer_question` и проверяет формат на первом вопросе. Если функции нет, импорт падает или формат иной, весь прогон идёт в режиме `retrieval-only` с предупреждением и причиной.
+Без `--retrieval-only` скрипт импортирует `answer_question` и делает пробный вызов на Q01; его результат сохраняется как ответ Q01, повторного вызова нет.
+
+- Если импорт, настройки LLM (`LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`), пробный вызов или формат ответа не прошли, прогон **останавливается** с кодом выхода 3 и причиной (имя исключения и сообщение сервиса, без ключа); файл результатов не создаётся. Молчаливого перехода в `retrieval-only` нет — этот режим включается только флагом.
+- Если на другом вопросе `answer_question` бросает `LLMError` или `LLMUnavailable`, прогон продолжается: `answer` и `refused` остаются `null`, в поле `error` записываются класс и сообщение ошибки. Сводка показывает число ошибок. Ловушка с ошибкой не считается корректным отказом; обычный вопрос с ошибкой размечается `incorrect`.
+- Ответ другого формата на любом вопросе — нарушение контракта: прогон завершается `ValueError`.
+- `temperature` в запросе к модели не задаётся (используется значение провайдера), поэтому повторный полный прогон может дать другие ответы; сравнивать имеет смысл файлы результатов, а не только метрики.
 
 ### Хранение результатов
 
@@ -185,8 +190,11 @@ uv run python benchmark/run.py --score benchmark/results/<файл>.json   # п�
 ```json
 {
   "created_at": "2026-11-17T12:00:00+00:00",
-  "mode": "retrieval-only",
-  "mode_reason": "...",
+  "git_sha": "<HEAD при прогоне>",
+  "mode": "full",
+  "mode_reason": "",
+  "model": "<LLM_MODEL>",
+  "base_url": "<LLM_BASE_URL без ключа>",
   "k": 3,
   "bm25": { "k1": 1.2, "b": 0.75 },
   "questions": [
@@ -197,8 +205,10 @@ uv run python benchmark/run.py --score benchmark/results/<файл>.json   # п�
       "relevant_ids": ["D03", "D11", "D14"],
       "expected_answer": "...",
       "retrieved": [{ "doc_id": "D11", "score": 8.1234 }],
-      "answer": null,
-      "refused": null,
+      "answer": "...",
+      "sources": ["D11"],
+      "refused": false,
+      "error": null,
       "verdict": null
     }
   ],
@@ -207,12 +217,13 @@ uv run python benchmark/run.py --score benchmark/results/<файл>.json   # п�
     "mrr_at_3": 0.0,
     "accuracy": null,
     "accuracy_labeled": 0,
-    "correct_rejection_rate": null
+    "correct_rejection_rate": null,
+    "errors": 0
   }
 }
 ```
 
-`verdict` заполняется вручную: `"correct"`, `"partial"` или `"incorrect"`. `--score` проверяет значения, пересчитывает `metrics` в том же файле и печатает сводку. Сводка содержит метрики и обычные вопросы, у которых релевантный документ не попал в top-3.
+`sources` — ID документов, которые сервис вернул как подтверждение ответа. В режиме `retrieval-only` `model`, `base_url`, `answer`, `sources` и `refused` равны `null`. `verdict` заполняется вручную: `"correct"`, `"partial"` или `"incorrect"`; для итоговой Accuracy КТ №2 используются только `correct` и `incorrect` — догадка или выдуманный факт считается ошибкой. `--score` проверяет значения, пересчитывает `metrics` в том же файле и печатает сводку. Сводка содержит метрики и обычные вопросы, у которых релевантный документ не попал в top-3.
 
 ## Результаты
 
