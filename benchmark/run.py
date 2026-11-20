@@ -10,6 +10,7 @@ Usage from the project root::
 import argparse
 import json
 import os
+import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
@@ -61,15 +62,44 @@ def is_valid_answer(result: object) -> bool:
     )
 
 
-def resolve_answerer(probe_question: str) -> tuple[Answerer | None, str]:
+def llm_errors() -> tuple[type[Exception], ...]:
+    """Return LLM exception classes that should not stop the whole run.
+
+    Returns:
+        ``LLMError`` (including ``LLMUnavailable``) or an empty tuple if the
+        assistant package cannot be imported.
+    """
+    try:
+        from app.assistant.llm import LLMError
+    except ImportError:
+        return ()
+    return (LLMError,)
+
+
+def describe_error(error: Exception) -> str:
+    """Describe an exception without request data or credentials.
+
+    Args:
+        error: Raised exception.
+
+    Returns:
+        Class name and the service message, if the exception defines one.
+    """
+    message = getattr(error, "message", "") or str(error)
+    return f"{type(error).__name__}: {message}" if message else type(error).__name__
+
+
+def resolve_answerer(
+    probe_question: str,
+) -> tuple[Answerer | None, dict | None, str]:
     """Import ``answer_question`` and check its format on one question.
 
     Args:
-        probe_question: Question used to probe the answer format.
+        probe_question: Question used to probe the service and its format.
 
     Returns:
-        The function and an empty reason if it is compatible, otherwise None
-        and the reason for falling back to retrieval-only mode.
+        The function, its probe result and an empty reason if it works;
+        otherwise None, None and the reason the full run cannot start.
     """
     try:
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", "app.config.settings")
@@ -77,19 +107,60 @@ def resolve_answerer(probe_question: str) -> tuple[Answerer | None, str]:
 
         django.setup()
         from app.assistant.services import answer_question
-    except Exception as error:  # noqa: BLE001 - any import problem means fallback
-        return None, f"answer_question недоступна: {type(error).__name__}: {error}"
+    except Exception as error:  # noqa: BLE001 - reported to the user, run stops
+        return None, None, f"answer_question недоступна: {describe_error(error)}"
     try:
         probe = answer_question(probe_question)
-    except Exception as error:  # noqa: BLE001 - a failing service means fallback
-        return None, f"answer_question завершилась ошибкой: {type(error).__name__}"
+    except Exception as error:  # noqa: BLE001 - reported to the user, run stops
+        return (
+            None,
+            None,
+            f"answer_question завершилась ошибкой: {describe_error(error)}",
+        )
     if not is_valid_answer(probe):
         keys = sorted(probe) if isinstance(probe, dict) else type(probe).__name__
-        return None, (
-            "answer_question вернула другой формат: ожидаются answer, sources, "
-            f"refused; получено {keys}"
+        return (
+            None,
+            None,
+            (
+                "answer_question вернула другой формат: ожидаются answer, sources, "
+                f"refused; получено {keys}"
+            ),
         )
-    return answer_question, ""
+    return answer_question, probe, ""
+
+
+def llm_settings() -> dict:
+    """Return the configured model and endpoint without the API key.
+
+    Returns:
+        ``model`` and ``base_url`` from Django settings, or None values.
+    """
+    from django.conf import settings
+
+    return {
+        "model": settings.LLM_MODEL or None,
+        "base_url": settings.LLM_BASE_URL or None,
+    }
+
+
+def git_sha() -> str | None:
+    """Return the current commit of the working tree, if Git is available.
+
+    Returns:
+        Full SHA of ``HEAD`` or None.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
 
 
 def run_benchmark(
@@ -97,6 +168,7 @@ def run_benchmark(
     retriever: Callable[..., list[dict]] = retrieve,
     answerer: Answerer | None = None,
     k: int = K,
+    prefetched: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Retrieve documents and optionally answers for every question.
 
@@ -105,22 +177,37 @@ def run_benchmark(
         retriever: Function ``(question, k) → results`` like ``retrieve``.
         answerer: Compatible ``answer_question`` or None for retrieval only.
         k: Retrieval depth.
+        prefetched: Answers already obtained by question ID, such as the probe.
 
     Returns:
-        Result records with retrieval output, answer fields and empty verdict.
+        Result records with retrieval output, answer fields, ``error`` and an
+        empty verdict. An LLM error on one question is recorded in ``error``
+        and the run continues.
 
     Raises:
         ValueError: If the answerer returns an incompatible result.
     """
+    prefetched = prefetched or {}
+    recoverable = llm_errors() if answerer is not None else ()
     records = []
     for question in questions:
         hits = retriever(question["question"], k=k)
-        answer = refused = None
+        answer = refused = sources = error = None
         if answerer is not None:
-            result = answerer(question["question"])
-            if not is_valid_answer(result):
-                raise ValueError(f"{question['id']}: incompatible answer format")
-            answer, refused = result["answer"], result["refused"]
+            try:
+                result = prefetched.get(question["id"]) or answerer(
+                    question["question"]
+                )
+            except recoverable as exc:
+                error = describe_error(exc)
+            else:
+                if not is_valid_answer(result):
+                    raise ValueError(f"{question['id']}: incompatible answer format")
+                answer, refused = result["answer"], result["refused"]
+                sources = [
+                    source["doc_id"] if isinstance(source, dict) else source
+                    for source in result["sources"]
+                ]
         records.append(
             {
                 **question,
@@ -132,7 +219,9 @@ def run_benchmark(
                     for hit in hits
                 ],
                 "answer": answer,
+                "sources": sources,
                 "refused": refused,
+                "error": error,
                 "verdict": None,
             }
         )
@@ -179,6 +268,8 @@ def print_summary(data: dict, path: Path) -> None:
     k, metrics = data["k"], data["metrics"]
     print(f"Результаты: {path}")
     print(f"Режим: {data.get('mode', '—')}")
+    if data.get("model"):
+        print(f"Модель: {data['model']} ({data.get('base_url') or '—'})")
     if data.get("mode_reason"):
         print(f"Причина: {data['mode_reason']}")
     regular, traps = metrics["regular_total"], metrics["trap_total"]
@@ -192,6 +283,10 @@ def print_summary(data: dict, path: Path) -> None:
     )
     crr = format_metric(metrics["correct_rejection_rate"])
     print(f"Correct Rejection Rate: {crr} ({traps} ловушек)")
+    errors = [item for item in data["questions"] if item.get("error")]
+    print(f"Ошибок LLM: {len(errors)}")
+    for item in errors:
+        print(f"  {item['id']}: {item['error']}")
     print(f"Релевантные документы вне top-{k}:")
     misses = 0
     for item in data["questions"]:
@@ -273,7 +368,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         argv: Arguments without the program name, or None for ``sys.argv``.
 
     Returns:
-        Process exit code: 0 on success, 2 on invalid result data.
+        Process exit code: 0 on success, 2 on invalid result data, 3 if the
+        full run cannot start because the probe call on the first question
+        failed.
     """
     args = parse_args(argv)
     if args.score:
@@ -286,16 +383,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     questions = load_questions(args.questions)
-    answerer, reason = (None, "задан --retrieval-only")
+    answerer, prefetched, reason = None, {}, "задан --retrieval-only"
+    llm = {"model": None, "base_url": None}
     if not args.retrieval_only:
-        answerer, reason = resolve_answerer(questions[0]["question"])
+        first = questions[0]
+        answerer, probe, reason = resolve_answerer(first["question"])
         if answerer is None:
-            print(f"Предупреждение: режим retrieval-only. {reason}", file=sys.stderr)
-    records = run_benchmark(questions, answerer=answerer)
+            print(
+                f"Полный прогон остановлен: пробный вызов на {first['id']} "
+                f"не прошёл. {reason}\n"
+                "Проверьте LLM_API_KEY, LLM_MODEL и LLM_BASE_URL; только поиск — "
+                "флаг --retrieval-only.",
+                file=sys.stderr,
+            )
+            return 3
+        prefetched = {first["id"]: probe}
+        llm = llm_settings()
+    records = run_benchmark(questions, answerer=answerer, prefetched=prefetched)
     data = {
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "git_sha": git_sha(),
         "mode": "full" if answerer else "retrieval-only",
         "mode_reason": reason,
+        **llm,
         "k": K,
         "bm25": {"k1": K1, "b": B},
         "questions": records,
