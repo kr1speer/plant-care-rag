@@ -244,12 +244,47 @@ class RunScriptTests(SimpleTestCase):
             with self.subTest(bad=bad):
                 self.assertFalse(self.run.is_valid_answer(bad))
 
-    def test_unconfigured_service_falls_back_to_retrieval_only(self):
+    def test_unconfigured_service_is_reported(self):
         """A question with matches requires a configured provider."""
         with self.settings(LLM_API_KEY=""):
-            answerer, reason = self.run.resolve_answerer("Монстера")
+            answerer, probe, reason = self.run.resolve_answerer("Монстера")
         self.assertIsNone(answerer)
+        self.assertIsNone(probe)
         self.assertIn("LLMUnavailable", reason)
+
+    def test_full_run_stops_when_probe_fails(self):
+        """Without a working LLM the full run stops instead of falling back."""
+        with tempfile.TemporaryDirectory() as tmp, self.settings(LLM_API_KEY=""):
+            code, out, err = self.call_main("--results-dir", tmp)
+            files = list(Path(tmp).iterdir())
+        self.assertEqual(code, 3)
+        self.assertEqual(files, [])
+        self.assertIn("Q01", err)
+        self.assertIn("LLMUnavailable", err)
+        self.assertNotIn("retrieval-only", out)
+
+    def test_llm_error_on_one_question_is_recorded(self):
+        """LLMError on one question is saved and the run continues."""
+        from app.assistant.llm import LLMError, LLMUnavailable
+
+        def flaky(question: str) -> dict:
+            if "монстер" in question:
+                raise LLMUnavailable
+            if "щитовк" in question:
+                raise LLMError
+            return {"answer": REFUSAL, "sources": [], "refused": True}
+
+        ids = {"Q01", "Q11", "Q12", "Q13"}
+        questions = [q for q in read_questions() if q["id"] in ids]
+        records = self.run.run_benchmark(questions, answerer=flaky)
+        by_id = {r["id"]: r for r in records}
+        self.assertIsNone(by_id["Q01"]["error"])
+        self.assertIn("LLMUnavailable", by_id["Q11"]["error"])
+        self.assertIn("LLMError", by_id["Q12"]["error"])
+        self.assertIsNone(by_id["Q11"]["refused"])
+        metrics = compute_metrics(records, k=3)
+        self.assertEqual(metrics["errors"], 2)
+        self.assertAlmostEqual(metrics["correct_rejection_rate"], 1 / 3)
 
     def test_full_mode_records_answers(self):
         """A compatible answerer fills answer and refused fields."""
@@ -263,9 +298,14 @@ class RunScriptTests(SimpleTestCase):
             }
 
         questions = [q for q in read_questions() if q["id"] in {"Q01", "Q11"}]
-        records = self.run.run_benchmark(questions, answerer=fake)
+        probe = {"answer": "Проба", "sources": [{"doc_id": "D27"}], "refused": False}
+        records = self.run.run_benchmark(
+            questions, answerer=fake, prefetched={"Q01": probe}
+        )
         self.assertEqual([r["refused"] for r in records], [False, True])
-        self.assertEqual(records[0]["answer"], "Ответ")
+        self.assertEqual(records[0]["answer"], "Проба")
+        self.assertEqual(records[0]["sources"], ["D27"])
+        self.assertEqual(records[1]["sources"], [])
         with self.assertRaises(ValueError):
             self.run.run_benchmark(questions, answerer=lambda q: {"answer": "x"})
 
@@ -283,13 +323,25 @@ class RunScriptTests(SimpleTestCase):
     def test_full_benchmark_uses_integrated_service(self, complete):
         """Save 15 results from the integrated service with a deterministic model."""
         complete.return_value = {"answer": REFUSAL, "refused": True, "sources": []}
-        with tempfile.TemporaryDirectory() as tmp:
-            code, _, errors = self.call_main("--results-dir", tmp)
+        llm = {"LLM_MODEL": "test-model", "LLM_BASE_URL": "https://llm.example/v1"}
+        with tempfile.TemporaryDirectory() as tmp, self.settings(**llm):
+            code, out, errors = self.call_main("--results-dir", tmp)
             self.assertEqual((code, errors), (0, ""))
             path = next(Path(tmp).glob("*.json"))
             data = json.loads(path.read_text(encoding="utf-8"))
+            raw = path.read_text(encoding="utf-8")
 
         self.assertEqual(data["mode"], "full")
+        self.assertEqual(data["model"], "test-model")
+        self.assertEqual(data["base_url"], "https://llm.example/v1")
+        self.assertNotIn("LLM_API_KEY", raw)
         self.assertEqual(len(data["questions"]), 15)
-        self.assertTrue(all(row["answer"] == REFUSAL for row in data["questions"]))
-        complete.assert_called()
+        for row in data["questions"]:
+            self.assertEqual(row["answer"], REFUSAL)
+            self.assertEqual((row["sources"], row["error"]), ([], None))
+            self.assertLessEqual(len(row["retrieved"]), 3)
+        self.assertEqual(data["metrics"]["correct_rejection_rate"], 1.0)
+        self.assertEqual(data["metrics"]["errors"], 0)
+        self.assertIn("Ошибок LLM: 0", out)
+        questions_with_hits = sum(bool(row["retrieved"]) for row in data["questions"])
+        self.assertEqual(complete.call_count, questions_with_hits)
