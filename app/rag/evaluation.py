@@ -60,14 +60,16 @@ def compute_metrics(records: Sequence[dict], k: int) -> dict:
 
     Args:
         records: Result records with ``type``, ``relevant_ids``, ``retrieved``
-            (list of ``{"doc_id", "score"}``), ``refused`` and ``verdict``.
+            (list of ``{"doc_id", "score"}``), ``refused``, ``verdict`` and an
+            optional ``error`` message of a failed LLM call.
         k: Cut-off depth for retrieval metrics.
 
     Returns:
         Metrics keyed ``recall_at_{k}``, ``mrr_at_{k}``, ``accuracy``,
-        ``accuracy_labeled``, ``correct_rejection_rate``, ``regular_total``
-        and ``trap_total``. Accuracy is None until every regular question has
-        a verdict; the rejection rate is None until every trap has ``refused``.
+        ``accuracy_labeled``, ``correct_rejection_rate``, ``regular_total``,
+        ``trap_total`` and ``errors``. Accuracy is None until every regular
+        question has a verdict; the rejection rate is None until every trap
+        has ``refused`` or an error, and a trap with an error is not a refusal.
 
     Raises:
         ValueError: If a verdict is not one of ``VERDICTS`` or None.
@@ -84,7 +86,8 @@ def compute_metrics(records: Sequence[dict], k: int) -> dict:
     recalls = [recall_at_k(ids(r), r["relevant_ids"], k) for r in regular]
     ranks = [reciprocal_rank(ids(r), r["relevant_ids"], k) for r in regular]
     labeled = [r["verdict"] for r in regular if r.get("verdict") is not None]
-    refusals = [r.get("refused") for r in traps]
+    # A trap that failed with an LLM error is answered, but not refused.
+    refusals = [False if r.get("error") else r.get("refused") for r in traps]
     return {
         f"recall_at_{k}": fmean(recalls) if recalls else None,
         f"mrr_at_{k}": fmean(ranks) if ranks else None,
@@ -101,4 +104,5 @@ def compute_metrics(records: Sequence[dict], k: int) -> dict:
         ),
         "regular_total": len(regular),
         "trap_total": len(traps),
+        "errors": sum(bool(r.get("error")) for r in records),
     }
